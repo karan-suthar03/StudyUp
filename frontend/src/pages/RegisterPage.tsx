@@ -5,10 +5,10 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Badge } from '@/components/ui/badge';
 import { Eye, EyeOff, Mail, Lock, Shield, Fingerprint, AlertCircle, Check, X, BookOpen, Sparkles } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { toast } from '@/hooks/use-toast';
+import { registerSchema } from '@/lib/validations';
 
 interface PasswordRequirement {
   label: string;
@@ -16,11 +16,7 @@ interface PasswordRequirement {
 }
 
 const passwordRequirements: PasswordRequirement[] = [
-  { label: 'At least 8 characters', test: (p) => p.length >= 8 },
-  { label: 'One uppercase letter', test: (p) => /[A-Z]/.test(p) },
-  { label: 'One lowercase letter', test: (p) => /[a-z]/.test(p) },
-  { label: 'One number', test: (p) => /\d/.test(p) },
-  { label: 'One special character', test: (p) => /[!@#$%^&*(),.?":{}|<>]/.test(p) },
+  { label: 'No leading or trailing spaces', test: (p) => p === p.trim() },
 ];
 
 export default function RegisterPage() {
@@ -37,31 +33,21 @@ export default function RegisterPage() {
   const [showPasswordRequirements, setShowPasswordRequirements] = useState(false);
 
   const validateForm = () => {
-    const newErrors: Record<string, string> = {};
-
-    if (!formData.email) {
-      newErrors.email = 'Email is required';
-    } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
-      newErrors.email = 'Please enter a valid email address';
+    const result = registerSchema.safeParse(formData);
+    
+    if (!result.success) {
+      const newErrors: Record<string, string> = {};
+      result.error.errors.forEach((err) => {
+        if (err.path[0]) {
+          newErrors[err.path[0] as string] = err.message;
+        }
+      });
+      setErrors(newErrors);
+      return false;
     }
-
-    if (!formData.password) {
-      newErrors.password = 'Password is required';
-    } else {
-      const failedRequirements = passwordRequirements.filter(req => !req.test(formData.password));
-      if (failedRequirements.length > 0) {
-        newErrors.password = 'Password does not meet requirements';
-      }
-    }
-
-    if (!formData.confirmPassword) {
-      newErrors.confirmPassword = 'Please confirm your password';
-    } else if (formData.password !== formData.confirmPassword) {
-      newErrors.confirmPassword = 'Passwords do not match';
-    }
-
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+    
+    setErrors({});
+    return true;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -70,8 +56,7 @@ export default function RegisterPage() {
     if (!validateForm()) return;
 
     try {
-      // Register with email and password only - no name needed
-      await register(formData.email, formData.password, 'Anonymous User');
+      await register(formData.email, formData.password);
       toast({
         title: "Session started!",
         description: "You're now anonymous. Start exploring and we'll find your matches.",
